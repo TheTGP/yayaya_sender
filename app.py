@@ -305,6 +305,17 @@ from email.mime.application import MIMEApplication
 import os
 import tempfile
 
+# ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА OPENPYXL
+try:
+    import openpyxl
+    st.sidebar.success("✅ openpyxl загружен")
+except ImportError:
+    st.sidebar.error("❌ openpyxl НЕ УСТАНОВЛЕН!")
+    st.sidebar.info("Устанавливаем принудительно...")
+    import subprocess
+    subprocess.check_call(['pip', 'install', '--force-reinstall', 'openpyxl==3.1.2'])
+    import openpyxl
+    st.sidear.success("✅ openpyxl установлен!")
 # Настройка страницы
 st.set_page_config(
     page_title="📧 Рассылка через Яндекс",
