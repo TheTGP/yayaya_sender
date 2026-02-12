@@ -512,6 +512,7 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
 import os
 import tempfile
 
