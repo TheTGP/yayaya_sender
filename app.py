@@ -504,15 +504,14 @@
 # #                         mime="text/csv"
 # #                     )
 
+
 import streamlit as st
 import pandas as pd
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
+from xhtml2pdf import pisa
 import os
 import tempfile
 
@@ -525,21 +524,32 @@ st.set_page_config(
 
 
 def create_pdf(text, filename):
-    """Создание PDF с текстом"""
-    c = canvas.Canvas(filename, pagesize=A4)
-    c.setFont("Helvetica", 12)
+    """Создание PDF через HTML (xhtml2pdf)"""
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 40px;
+                font-size: 14pt;
+                line-height: 1.5;
+            }}
+            .content {{
+                white-space: pre-wrap;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="content">{str(text)}</div>
+    </body>
+    </html>
+    """
 
-    text_str = str(text)
-    y = 800
-    for i in range(0, len(text_str), 90):
-        line = text_str[i:i + 90]
-        c.drawString(50, y, line)
-        y -= 20
-        if y < 50:
-            c.showPage()
-            c.setFont("Helvetica", 12)
-            y = 800
-    c.save()
+    with open(filename, "wb") as f:
+        pisa.CreatePDF(html_content, dest=f)
 
 
 def send_yandex_email(sender_full, app_password, recipient, text, pdf_path):
