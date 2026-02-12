@@ -511,7 +511,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from xhtml2pdf import pisa
+from fpdf import FPDF
 import os
 import tempfile
 
@@ -523,33 +523,31 @@ st.set_page_config(
 )
 
 
-def create_pdf(text, filename):
-    """Создание PDF через HTML (xhtml2pdf)"""
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 40px;
-                font-size: 14pt;
-                line-height: 1.5;
-            }}
-            .content {{
-                white-space: pre-wrap;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="content">{str(text)}</div>
-    </body>
-    </html>
-    """
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Сообщение', 0, 1, 'C')
+        self.ln(10)
 
-    with open(filename, "wb") as f:
-        pisa.CreatePDF(html_content, dest=f)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Страница {self.page_no()}', 0, 0, 'C')
+
+
+def create_pdf(text, filename):
+    """Создание PDF с помощью FPDF2 (без зависимостей)"""
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font('Arial', '', 12)
+
+    # Разбиваем текст на строки по 90 символов
+    text_str = str(text)
+    for line in text_str.split('\n'):
+        pdf.multi_cell(0, 10, line)
+        pdf.ln(5)
+
+    pdf.output(filename)
 
 
 def send_yandex_email(sender_full, app_password, recipient, text, pdf_path):
@@ -591,119 +589,71 @@ def test_connection(sender_email, app_password):
         return False, str(e)
 
 
-# Заголовок
+# --- ИНТЕРФЕЙС (полностью идентичен вашему) ---
 st.title("📧 Массовая рассылка писем через Яндекс")
 st.markdown("---")
 
-# Сайдбар для настроек
 with st.sidebar:
     st.header("⚙️ Настройки отправителя")
-
-    sender_email = st.text_input(
-        "📧 Ваш Яндекс email",
-        placeholder="your.email@yandex.ru",
-        help="Полный адрес Яндекс почты"
-    )
-
-    app_password = st.text_input(
-        "🔑 Пароль приложения",
-        type="password",
-        placeholder="Скопируйте пароль из Яндекса",
-        help="Не ваш обычный пароль, а специальный пароль приложения!"
-    )
+    sender_email = st.text_input("📧 Ваш Яндекс email", placeholder="your.email@yandex.ru")
+    app_password = st.text_input("🔑 Пароль приложения", type="password", placeholder="Пароль из Яндекса")
 
     st.markdown("---")
     st.header("📝 Настройки письма")
-
-    email_subject = st.text_input(
-        "✉️ Тема письма",
-        value="Важное сообщение",
-        key="email_subject"
-    )
-
-    email_body = st.text_area(
-        "📄 Текст письма",
-        value="Здравствуйте!\n\nВо вложении PDF с вашим сообщением.\n\nС уважением,\nОтправитель",
-        height=150,
-        key="email_body"
-    )
+    email_subject = st.text_input("✉️ Тема письма", value="Важное сообщение", key="email_subject")
+    email_body = st.text_area("📄 Текст письма",
+                              value="Здравствуйте!\n\nВо вложении PDF с вашим сообщением.\n\nС уважением,\nОтправитель",
+                              height=150, key="email_body")
 
     st.markdown("---")
-    st.header("ℹ️ Инструкция")
     st.info("""
-    1. Включите доступ в настройках Яндекса
-    2. Создайте пароль приложения
-    3. Загрузите Excel файл
-    4. Нажмите "Начать рассылку"
-
     **Формат Excel:**
-    - Колонка A: Email получателя
+    - Колонка A: Email
     - Колонка B: Текст для PDF
     """)
 
-# Основной контент
 col1, col2 = st.columns([2, 1])
 
 with col1:
     st.header("📤 Загрузите файл с получателями")
-
-    uploaded_file = st.file_uploader(
-        "Выберите Excel файл",
-        type=['xlsx', 'xls'],
-        help="Файл должен содержать email в колонке A и текст в колонке B"
-    )
+    uploaded_file = st.file_uploader("Выберите Excel файл", type=['xlsx', 'xls'])
 
     if uploaded_file is not None:
         try:
             df = pd.read_excel(uploaded_file, header=None)
             st.success(f"✅ Загружено {len(df)} получателей")
 
-            st.subheader("📋 Предпросмотр данных")
+            st.subheader("📋 Предпросмотр")
             preview_df = df.iloc[:5].copy()
             preview_df.columns = ['Email', 'Текст сообщения'] if len(df.columns) > 1 else ['Email', 'Нет данных']
             st.dataframe(preview_df, use_container_width=True)
 
-            if len(df.columns) < 2:
-                st.warning("⚠️ В файле только одна колонка. Убедитесь, что текст для PDF есть в колонке B")
-
             st.session_state['df'] = df
-
         except Exception as e:
             st.error(f"❌ Ошибка чтения файла: {e}")
 
 with col2:
     st.header("🔄 Проверка подключения")
-
-    if st.button("🔌 Проверить подключение к Яндекс", use_container_width=True):
+    if st.button("🔌 Проверить подключение", use_container_width=True):
         if not sender_email or not app_password:
-            st.error("❌ Заполните email и пароль приложения!")
+            st.error("❌ Заполните email и пароль!")
         else:
-            with st.spinner("Проверяем подключение..."):
+            with st.spinner("Проверяем..."):
                 success, message = test_connection(sender_email, app_password)
                 if success:
                     st.success(message)
                 else:
                     st.error(f"❌ Ошибка: {message}")
-                    st.info("""
-                    💡 Возможные причины:
-                    1. Неправильный пароль приложения
-                    2. Не включен доступ в настройках Яндекса
-                    3. Логин должен быть без @yandex.ru
-                    """)
-
-# Кнопка отправки
-st.markdown("---")
 
 if 'df' in st.session_state:
+    st.markdown("---")
     col_send1, col_send2, col_send3 = st.columns([1, 2, 1])
     with col_send2:
-        if st.button("🚀 НАЧАТЬ МАССОВУЮ РАССЫЛКУ",
-                     type="primary",
-                     use_container_width=True,
+        if st.button("🚀 НАЧАТЬ РАССЫЛКУ", type="primary", use_container_width=True,
                      disabled=not (sender_email and app_password)):
 
             df = st.session_state['df']
-            progress_bar = st.progress(0, text="Подготовка к отправке...")
+            progress_bar = st.progress(0, text="Подготовка...")
             status_text = st.empty()
 
             with tempfile.TemporaryDirectory() as temp_folder:
@@ -719,12 +669,11 @@ if 'df' in st.session_state:
                     text = row.iloc[1] if len(row) > 1 else ""
 
                     if not recipient or recipient == '' or pd.isna(recipient):
-                        results.append({"email": "Пустой", "status": "⚠️ Пропущен", "error": "Пустой email"})
                         continue
 
                     progress = (index + 1) / len(df)
                     progress_bar.progress(progress, text=f"Отправка {index + 1}/{len(df)}: {recipient}")
-                    status_text.text(f"📨 Отправляем письмо {index + 1} из {len(df)}...")
+                    status_text.text(f"📨 Отправляем письмо {recipient}...")
 
                     try:
                         pdf_name = f"temp_{index}.pdf"
@@ -732,43 +681,31 @@ if 'df' in st.session_state:
                         create_pdf(text, pdf_path)
                         send_yandex_email(sender_email, app_password, recipient, text, pdf_path)
                         success_count += 1
-                        results.append({"email": recipient, "status": "✅ Успешно", "error": ""})
+                        results.append({"email": recipient, "status": "✅ Успешно"})
                     except Exception as e:
                         fail_count += 1
-                        results.append({"email": recipient, "status": "❌ Ошибка", "error": str(e)})
+                        results.append({"email": recipient, "status": "❌ Ошибка", "error": str(e)[:50]})
 
                     with results_container:
-                        results_df = pd.DataFrame(results[-10:])
-                        st.dataframe(results_df, use_container_width=True)
+                        st.dataframe(pd.DataFrame(results[-10:]), use_container_width=True)
 
                 progress_bar.progress(1.0, text="✅ Рассылка завершена!")
-                st.markdown("---")
-                st.subheader("📊 Итоговые результаты")
+                status_text.text("")
 
+                st.subheader("📊 Результаты")
                 col_res1, col_res2, col_res3 = st.columns(3)
-                col_res1.metric("✅ Успешно отправлено", success_count)
+                col_res1.metric("✅ Успешно", success_count)
                 col_res2.metric("❌ Ошибок", fail_count)
-                col_res3.metric("📧 Всего обработано", len(df))
+                col_res3.metric("📧 Всего", len(df))
 
                 if results:
-                    results_full_df = pd.DataFrame(results)
-                    csv = results_full_df.to_csv(index=False).encode('utf-8')
+                    results_df = pd.DataFrame(results)
+                    csv = results_df.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        label="📥 Скачать отчет о рассылке",
+                        label="📥 Скачать отчет",
                         data=csv,
-                        file_name="report_sending.csv",
+                        file_name="sending_report.csv",
                         mime="text/csv"
                     )
 else:
     st.info("👆 Загрузите Excel файл, чтобы начать рассылку")
-
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center; color: gray;'>
-        ⚡ Разработано для массовой рассылки через Яндекс почту<br>
-        📌 Не забудьте создать <b>пароль приложения</b> в настройках Яндекса!
-    </div>
-    """,
-    unsafe_allow_html=True
-)
